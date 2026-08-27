@@ -4,6 +4,7 @@ Manages candidate profiles, interview history, and scoring
 """
 
 import logging
+import secrets
 import uuid
 from datetime import datetime, timedelta
 from typing import Any
@@ -34,6 +35,8 @@ class CandidateManager:
 
         candidate_id = f"candidate_{uuid.uuid4().hex[:12]}"
         now = utcnow()
+        verification_token = secrets.token_urlsafe(32)
+        verification_token_expires_at = now + timedelta(hours=24)
         db = SessionLocal()
 
         try:
@@ -41,6 +44,9 @@ class CandidateManager:
                 candidate_id=candidate_id,
                 name=name.strip(),
                 email=email.strip().lower(),
+                email_verified=False,
+                verification_token=verification_token,
+                verification_token_expires_at=verification_token_expires_at,
                 resume_text=resume_text,
                 skills=skills or [],
                 interview_history=[],
@@ -53,10 +59,25 @@ class CandidateManager:
             db.add(candidate)
             db.commit()
 
+            # Trigger email verification sending
+            try:
+                from orchestrator.email_service import email_service
+
+                email_service.send_verification_email(
+                    candidate_name=candidate.name,
+                    candidate_email=candidate.email,
+                    token=verification_token,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to send email verification for {candidate.email}: {e}"
+                )
+
             return {
                 "candidate_id": candidate_id,
                 "name": candidate.name,
                 "email": candidate.email,
+                "email_verified": candidate.email_verified,
                 "resume_text": resume_text,
                 "skills": skills or [],
                 "interview_history": [],

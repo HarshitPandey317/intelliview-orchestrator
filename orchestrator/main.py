@@ -90,6 +90,7 @@ from orchestrator.state_sync import StateSynchronizer
 from orchestrator.worker_registry import WorkerRegistry
 from routers.ab_testing import create_ab_testing_routes
 from routers.candidates import create_candidate_routes
+from routers.email_verification import router as email_verification_router
 from routers.questions import create_question_routes
 from routers.schedule import create_schedule_routes
 from routers.sessions import (  # noqa: F401 (re-exported for tests)
@@ -717,6 +718,21 @@ async def start_interview(
         logger.info(
             f"API: Creating interview session for candidate {request.candidate_id}"
         )
+        candidate = session_db.execute(
+            select(Candidate).where(Candidate.candidate_id == request.candidate_id)
+        ).scalar_one_or_none()
+
+        if candidate is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Candidate not found",
+            )
+
+        if not candidate.email_verified:
+            raise HTTPException(
+                status_code=403,
+                detail="Candidate email not verified",
+            )
 
         # Parse priority
         priority_map = {
@@ -789,7 +805,8 @@ async def start_interview(
             risk_score=None,
             estimated_wait_time=wait_time if wait_time >= 0 else None,
         )
-
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error starting interview session: {e!s}")
         raise HTTPException(status_code=500, detail=f"Error starting interview: {e!s}")
@@ -1055,6 +1072,7 @@ def _build_risk_report_pdf(report: dict) -> Response:
     )
 
 
+app.include_router(email_verification_router)
 app.include_router(create_candidate_routes(candidate_manager=candidate_manager))
 app.include_router(create_schedule_routes())
 app.include_router(create_question_routes(question_bank=question_bank))

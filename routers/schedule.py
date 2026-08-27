@@ -81,6 +81,12 @@ def create_schedule_routes() -> APIRouter:
                     detail=f"Candidate with ID '{payload.candidate_id}' not found.",
                 )
 
+            if not candidate.email_verified:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Candidate email not verified",
+                )
+
             # Ensure datetime is timezone-aware
             scheduled_at = payload.scheduled_at
             if scheduled_at.tzinfo is None:

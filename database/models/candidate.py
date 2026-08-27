@@ -1,6 +1,6 @@
 """Candidate ORM model."""
 
-from sqlalchemy import JSON, Column, DateTime, Float, Integer, String
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, Integer, String
 from sqlalchemy.orm import relationship
 
 from database.models._base import Base, utcnow
@@ -14,6 +14,9 @@ class Candidate(Base):
     candidate_id = Column(String(255), primary_key=True, index=True, nullable=False)
     name = Column(String(200), nullable=False)
     email = Column(String(255), nullable=False, unique=True)
+    email_verified = Column(Boolean, nullable=False, default=False)
+    verification_token = Column(String(255), nullable=True, unique=True, index=True)
+    verification_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     resume_text = Column(String(10000), nullable=True)
     skills = Column(JSON, nullable=True, default=list)
     interview_history = Column(JSON, nullable=True, default=list)
