@@ -179,3 +179,29 @@ def test_register_worker_default_weight_equals_capacity():
     assert w is not None
     assert w["weight"] == 8  # defaults to capacity
     assert w["capacity"] == 8
+
+
+# ===========================================================================
+# NEW: Worker self health-report tests (Issue #37)
+# ===========================================================================
+
+
+def test_report_health_records_metrics():
+    reg = _new_registry()
+    reg.register_worker("hw1", capacity=4)
+    assert (
+        reg.report_health("hw1", cpu_pct=42.5, memory_pct=63.1, queue_depth=2) is True
+    )
+    w = reg.get_worker("hw1")
+    assert w is not None
+    assert w["cpu_pct"] == 42.5
+    assert w["memory_pct"] == 63.1
+    assert w["queue_depth"] == 2
+    assert w.get("last_health_report")
+
+
+def test_report_health_unknown_worker_returns_false():
+    reg = _new_registry()
+    assert (
+        reg.report_health("ghost", cpu_pct=1.0, memory_pct=1.0, queue_depth=0) is False
+    )

@@ -33,7 +33,7 @@ def init_db():
             meeting_link TEXT,
             location TEXT
         )
-    """
+        """
     )
     cursor.execute(
         """
@@ -46,7 +46,7 @@ def init_db():
             recipient TEXT NOT NULL,
             status TEXT NOT NULL
         )
-    """
+        """
     )
     conn.commit()
 

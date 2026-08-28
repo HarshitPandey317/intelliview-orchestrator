@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from database.db import get_db
 from database.models.system_settings import SystemSettings
+from workers.risk_engine import RiskScoringEngine
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,28 @@ def create_settings_routes() -> APIRouter:
     """Create system settings routes."""
 
     router = APIRouter()
+
+    @router.get("/api/admin/risk-config")
+    async def get_risk_config():
+        """Return the current live risk engine configuration."""
+        pipeline_weights = RiskScoringEngine.get_pipeline_weights()
+        thresholds = RiskScoringEngine.get_thresholds()
+
+        return {
+            "pipeline_weights": {
+                "video": pipeline_weights[0],
+                "audio": pipeline_weights[1],
+                "evaluation": pipeline_weights[2],
+            },
+            "thresholds": {
+                "low": thresholds[0],
+                "medium": thresholds[1],
+                "high": thresholds[2],
+            },
+            "video_factors": RiskScoringEngine.get_video_factors(),
+            "audio_factors": RiskScoringEngine.get_audio_factors(),
+            "evaluation_factors": RiskScoringEngine.get_evaluation_factors(),
+        }
 
     @router.get("/settings")
     async def get_settings(session_db: Session = Depends(get_db)):

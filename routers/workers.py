@@ -33,6 +33,15 @@ class WorkerHeartbeatRequest(BaseModel):
     active_tasks: int
 
 
+class WorkerHealthReportRequest(BaseModel):
+    """Request model for worker self-reported health metrics"""
+
+    worker_id: str
+    cpu_pct: float
+    memory_pct: float
+    queue_depth: int
+
+
 def create_worker_routes(
     worker_registry, load_balancer, scheduler, session_tracker
 ) -> APIRouter:
@@ -145,6 +154,56 @@ def create_worker_routes(
             logger.error(f"Error processing heartbeat: {e!s}")
             raise HTTPException(
                 status_code=500, detail=f"Error processing heartbeat: {e!s}"
+            )
+
+    @router.post("/worker/health-report", dependencies=[Depends(require_token)])
+    async def worker_health_report(request: WorkerHealthReportRequest):
+        """
+        Process a periodic self-health report from a worker node
+
+        Workers send CPU/memory/queue depth metrics at a regular interval
+        so the registry can track resource utilization per worker.
+
+        Args:
+            request: Health report data (worker_id, cpu_pct, memory_pct, queue_depth)
+
+        Returns:
+            dict: Health report confirmation
+        """
+        try:
+            logger.debug(
+                f"Health report from worker: {request.worker_id} "
+                f"(cpu_pct={request.cpu_pct}, memory_pct={request.memory_pct}, "
+                f"queue_depth={request.queue_depth})"
+            )
+
+            ok = worker_registry.report_health(
+                worker_id=request.worker_id,
+                cpu_pct=request.cpu_pct,
+                memory_pct=request.memory_pct,
+                queue_depth=request.queue_depth,
+            )
+
+            if not ok:
+                raise HTTPException(
+                    status_code=404, detail=f"Worker {request.worker_id} not found"
+                )
+
+            # Invalidate the workers + statistics caches so the next dashboard poll is fresh.
+            http_cache.invalidate("workers", "worker-statistics")
+
+            return {
+                "status": "success",
+                "message": "Health report received",
+                "worker_id": request.worker_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error processing health report: {e!s}")
+            raise HTTPException(
+                status_code=500, detail=f"Error processing health report: {e!s}"
             )
 
     @router.get("/workers")

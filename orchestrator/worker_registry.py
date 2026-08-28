@@ -22,6 +22,9 @@ from metrics.prometheus_metrics import (
     CURRENT_WORKERS,
     WORKER_ACTIVE_TASKS,
     WORKER_CAPACITY,
+    WORKER_CPU_PCT,
+    WORKER_MEMORY_PCT,
+    WORKER_QUEUE_DEPTH,
     WORKERS_HEALTHY,
     WORKERS_REGISTERED,
     WORKERS_UNHEALTHY,
@@ -102,6 +105,10 @@ class WorkerRegistry:
                     "last_heartbeat": raw.get("last_heartbeat", ""),
                     "total_tasks_processed": int(raw.get("total_tasks_processed", 0)),
                     "failed_tasks": int(raw.get("failed_tasks", 0)),
+                    "cpu_pct": float(raw.get("cpu_pct", 0.0)),
+                    "memory_pct": float(raw.get("memory_pct", 0.0)),
+                    "queue_depth": int(raw.get("queue_depth", 0)),
+                    "last_health_report": raw.get("last_health_report", ""),
                 }
             self._hydrated = True
         except Exception as exc:
@@ -165,6 +172,12 @@ class WorkerRegistry:
                                         raw.get("penalty_weight", 1.0)
                                     ),
                                     "penalty_until": raw.get("penalty_until"),
+                                    "cpu_pct": float(raw.get("cpu_pct", 0.0)),
+                                    "memory_pct": float(raw.get("memory_pct", 0.0)),
+                                    "queue_depth": int(raw.get("queue_depth", 0)),
+                                    "last_health_report": raw.get(
+                                        "last_health_report", ""
+                                    ),
                                 }
                 except Exception as exc:
                     logger.warning("Error processing sync event: %s", exc)
@@ -391,6 +404,68 @@ class WorkerRegistry:
 
         except Exception as e:
             logger.error(f"Error processing heartbeat: {e!s}")
+            return False
+
+    def report_health(
+        self,
+        worker_id: str,
+        cpu_pct: float,
+        memory_pct: float,
+        queue_depth: int,
+    ) -> bool:
+        """
+        Process a worker self-health report (CPU/memory/queue depth).
+
+        Args:
+            worker_id: Worker identifier
+            cpu_pct: Self-reported CPU utilization percent
+            memory_pct: Self-reported memory utilization percent
+            queue_depth: Self-reported queue depth
+
+        Returns:
+            bool: True if successful
+        """
+        try:
+            with self.lock:
+                if worker_id not in self.local_workers:
+                    logger.warning(
+                        f"Received health report from unknown worker: {worker_id}"
+                    )
+                    return False
+
+                self.local_workers[worker_id]["cpu_pct"] = cpu_pct
+                self.local_workers[worker_id]["memory_pct"] = memory_pct
+                self.local_workers[worker_id]["queue_depth"] = queue_depth
+                self.local_workers[worker_id]["last_health_report"] = datetime.now(
+                    timezone.utc
+                ).isoformat()
+
+            if self.redis_client:
+                key = f"{self.WORKER_KEY_PREFIX}{worker_id}"
+                self.redis_client.hset(
+                    key,
+                    mapping={
+                        "cpu_pct": cpu_pct,
+                        "memory_pct": memory_pct,
+                        "queue_depth": queue_depth,
+                        "last_health_report": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+                self._trigger_sync_broadcast(worker_id)
+
+            logger.debug(
+                f"Health report from {worker_id}: cpu={cpu_pct}% mem={memory_pct}% "
+                f"queue_depth={queue_depth}"
+            )
+
+            WORKER_CPU_PCT.labels(worker_id=worker_id).set(cpu_pct)
+            WORKER_MEMORY_PCT.labels(worker_id=worker_id).set(memory_pct)
+            WORKER_QUEUE_DEPTH.labels(worker_id=worker_id).set(queue_depth)
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error processing health report: {e!s}")
             return False
 
     def increment_active_tasks(self, worker_id: str) -> bool:
