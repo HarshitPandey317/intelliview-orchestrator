@@ -9,7 +9,6 @@ from routers.session_control import (
     UNANSWERED_DEDUCTION,
     _calculate_partial_score,
     create_session_control_router,
-    get_retry_count,
     has_pending_retry,
     increment_retry_count,
     mark_retry_pending,
