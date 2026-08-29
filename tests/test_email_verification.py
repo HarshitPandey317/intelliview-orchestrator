@@ -1,24 +1,3 @@
-# import pytest
-# import secrets
-# from datetime import datetime, timedelta, timezone
-# from unittest.mock import patch, MagicMock
-
-# # First patch standard network dependencies to avoid issues during startup
-# with (
-#     patch("redis.from_url", return_value=MagicMock()),
-#     patch("sqlalchemy.create_engine", return_value=MagicMock()),
-# ):
-#     from orchestrator.main import app
-
-# from fastapi.testclient import TestClient
-# from database.models import Candidate
-
-# client = TestClient(app)
-
-# @pytest.fixture
-# def mock_smtp(mocker):
-#     """Mock the SMTP send_message call to avoid real network requests."""
-#     return mocker.patch("smtplib.SMTP", autospec=True)
 import secrets
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch

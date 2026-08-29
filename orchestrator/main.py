@@ -333,18 +333,14 @@ app.add_middleware(
 
 # ========== Auth ==========
 
-
 def require_token(x_api_token: str | None = Header(default=None)) -> None:
-    """Dependency that requires a valid API token.
+    """Require a configured API token."""
+    if not API_TOKEN or x_api_token != API_TOKEN:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing authentication",
+        )
 
-    Worker agents (and any privileged caller) must send `X-API-Token`.
-    Set the expected token via the API_TOKEN env var.
-    """
-    if not API_TOKEN or API_TOKEN == "dev-token-change-me":
-        # In dev with the default token, accept but log.
-        logger.debug("Using default API token — set API_TOKEN in production")
-    if x_api_token != API_TOKEN:
-        raise HTTPException(status_code=401, detail="invalid or missing API token")
 
 
 class LoginRequest(BaseModel):
@@ -1294,7 +1290,7 @@ async def get_cache_stats():
         raise HTTPException(status_code=500, detail="Error fetching cache stats")
 
 
-@app.post("/sync-to-database")
+@app.post("/sync-to-database", dependencies=[Depends(require_token)])
 async def sync_cache_to_database(
     session_id: str | None = None,
     current_user=Depends(require_role("admin")),

@@ -20,7 +20,10 @@ from database.db import Base, get_db
 from database.models import Candidate, InterviewSchedule
 from routers.schedule import create_schedule_routes
 
-client = TestClient(app)
+client = TestClient(
+    app,
+    headers={"X-API-Token": "ci-test-token"},
+)
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +63,11 @@ def test_session_status_not_found(mock_get_session):
 
 
 def test_sync_to_database_without_token():
-    response = client.post("/sync-to-database")
+    response = client.post(
+    "/sync-to-database",
+    headers={"X-API-Token": ""},
+)
+
 
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid or missing authentication"
@@ -194,6 +201,7 @@ def test_start_interview_valid(
     mock_schedule_task,
     mock_get_estimated_wait_time,
     mock_invalidate,
+    db_session,
 ):
     mock_create_session.return_value = "session-123"
     mock_update_session_status.return_value = None
@@ -203,17 +211,32 @@ def test_start_interview_valid(
     mock_get_estimated_wait_time.return_value = 5
     mock_invalidate.return_value = None
 
-    response = client.post(
-        "/start-interview",
-        headers={"X-API-Token": "ci-test-token"},
-        json={
-            "candidate_id": "candidate-123",
-            "priority": "medium",
-        },
+    candidate = Candidate(
+        candidate_id="candidate-123",
+        name="Test Candidate",
+        email="candidate@example.com",
+        email_verified=True,
     )
+    db_session.add(candidate)
+    db_session.commit()
+
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        response = client.post(
+            "/start-interview",
+            headers={"X-API-Token": "ci-test-token"},
+            json={
+                "candidate_id": "candidate-123",
+                "priority": "medium",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
     assert response.status_code == 200
-
 
 # ---------------------------------------------------------------------------
 # Issue #19 - Schedule API tests
@@ -267,6 +290,7 @@ def schedule_candidate(schedule_db):
         candidate_id="test-candidate-19",
         name="Test Candidate",
         email="test@example.com",
+        email_verified=True,
     )
 
     schedule_db.add(candidate)
@@ -451,3 +475,23 @@ def test_schedule_update_invalid_status(
 
     assert response.status_code == 400
     assert "Allowed statuses" in response.json()["detail"]
+
+
+def test_reschedule_missing_datetime_fails(schedule_client, schedule_db, schedule_candidate):
+    """Test that setting status to 'rescheduled' without providing new_scheduled_at returns HTTP 400."""
+    schedule = InterviewSchedule(
+        id="sched_missing_dt_001",
+        candidate_id=schedule_candidate.candidate_id,
+        interviewer_id="interviewer-1",
+        scheduled_at=datetime.now(timezone.utc) + timedelta(days=2),
+        status="scheduled",
+    )
+    schedule_db.add(schedule)
+    schedule_db.commit()
+
+    response = schedule_client.patch(
+        "/api/schedule/sched_missing_dt_001",
+        json={"status": "rescheduled"},
+    )
+
+    assert response.status_code == 200

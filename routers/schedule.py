@@ -95,6 +95,7 @@ def create_schedule_routes() -> APIRouter:
             # Validate that scheduled_at is in the future
             now_utc = datetime.now(timezone.utc)
             if scheduled_at <= now_utc:
+                db.rollback()  # <-- Add this line
                 raise HTTPException(
                     status_code=400,
                     detail="Scheduled date and time must be in the future.",
@@ -361,6 +362,9 @@ def create_schedule_routes() -> APIRouter:
                 if payload.new_scheduled_at is not None
                 else payload.scheduled_at
             )
+            
+           
+
 
             if (
                 clean_status in {"cancelled", "completed"}
@@ -382,6 +386,7 @@ def create_schedule_routes() -> APIRouter:
                 now_utc = datetime.now(timezone.utc)
 
                 if sched_at <= now_utc:
+                    db.rollback()  # <-- ADD THIS LINE
                     raise HTTPException(
                         status_code=400,
                         detail="Scheduled date and time must be in the future.",
