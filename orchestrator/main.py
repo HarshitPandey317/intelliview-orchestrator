@@ -96,11 +96,9 @@ from routers.schedule import create_schedule_routes
 
 """Anti-cheat integrity signal ingestion routes."""
 
-from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/integrity", tags=["integrity"])
 
@@ -2556,11 +2554,9 @@ async def get_dashboard():
         HTML content of the dashboard
     """
     try:
-
-        dashboard_path = os.path.join(
-            os.path.dirname(__file__), "..", "monitoring", "dashboard.html"
+        dashboard_path = (
+            Path(__file__).parent.parent / "monitoring" / "dashboard.html"
         )
-
         dashboard_file = Path(dashboard_path)
 
         if await dashboard_file.exists():
@@ -2569,15 +2565,14 @@ async def get_dashboard():
             from fastapi.responses import HTMLResponse
 
             return HTMLResponse(content=html_content)
+
         raise HTTPException(status_code=404, detail="Dashboard HTML not found")
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error serving dashboard: {e!s}")
-        raise HTTPException(status_code=500, detail=f"Error serving dashboard: {e!s}")
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error serving dashboard: {e!s}",
+        )
