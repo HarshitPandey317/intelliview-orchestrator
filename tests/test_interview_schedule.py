@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import Index, UniqueConstraint, create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
@@ -20,6 +20,7 @@ from orchestrator.main import app as original_app
 from routers.schedule import create_schedule_routes
 
 app = original_app
+
 
 # ---------------------------------------------------------------------------
 # Test Engine & App Setup

@@ -1,17 +1,3 @@
-"""
-FastAPI Orchestration Server
-Main entry point for the AI Interview Orchestrator API
-
-Integrates:
-- Session Manager for lifecycle management
-- Session Tracker for monitoring
-- State Synchronizer for Redis/DB consistency
-- Scheduler for intelligent task scheduling
-- Load Balancer for worker distribution
-- Worker Registry for node tracking
-- Task Queue integration with Celery
-"""
-
 import io
 import json
 import logging
@@ -46,6 +32,7 @@ from config import (
 )
 from database.db import engine, get_db
 from database.models import Base, Candidate, InterviewSession
+from database.subscriber_store import create_table, list_subscribers
 from metrics.prometheus_metrics import (
     POSTGRES_HEALTH,
     REDIS_HEALTH,
@@ -687,8 +674,6 @@ async def get_circuit_breaker_status():
 
 
 # ========== Interview Session Endpoints ==========
-
-
 @app.post(
     "/start-interview",
     response_model=InterviewSessionResponse,
@@ -745,6 +730,29 @@ async def start_interview(
         }
         priority = priority_map.get(request.priority.lower(), TaskPriority.MEDIUM)
 
+        # Check if system can accept task
+        try:
+            if not scheduler.can_accept_task():
+                logger.warning(
+                    f"System at capacity, rejecting task for candidate: {request.candidate_id}"
+                )
+                from fastapi.responses import JSONResponse
+
+                return JSONResponse(
+                    status_code=503,
+                    content={"error": "service_unavailable"},
+                    headers={"Retry-After": "5"},
+                )
+        except Exception as e:
+            logger.error(f"Error checking capacity: {e!s}")
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=503,
+                content={"error": "service_unavailable"},
+                headers={"Retry-After": "5"},
+            )
+
         # Enforce the Issue #72 retry limit per candidate and role.
         position = (request.position or "").strip()
 
@@ -783,6 +791,7 @@ async def start_interview(
                         status_code=409,
                         detail="Retry could not be started.",
                     )
+
         # Create session
         session_id = session_manager.create_session(
             candidate_id=request.candidate_id,
@@ -801,27 +810,6 @@ async def start_interview(
         session_manager.update_session_status(
             session_id, session_manager.QUEUED, {"priority": priority.name}
         )
-
-        # Check if system can accept task
-        try:
-            if not scheduler.can_accept_task():
-                logger.warning(f"System at capacity, rejecting task: {session_id}")
-                from fastapi.responses import JSONResponse
-
-                return JSONResponse(
-                    status_code=503,
-                    content={"error": "service_unavailable"},
-                    headers={"Retry-After": "5"},
-                )
-        except Exception as e:
-            logger.error(f"Error checking capacity: {e!s}")
-            from fastapi.responses import JSONResponse
-
-            return JSONResponse(
-                status_code=503,
-                content={"error": "service_unavailable"},
-                headers={"Retry-After": "5"},
-            )
 
         # Use scheduler to intelligently assign task
         scheduler.schedule_task(session_id, priority=priority)
