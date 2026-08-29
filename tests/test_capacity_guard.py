@@ -68,5 +68,4 @@ def test_capacity_check_exception_fails_safe_to_503(client_override):
                 "priority": "medium",
             },
         )
-
     assert response.status_code == 503
