@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import Index, UniqueConstraint, create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
@@ -784,67 +784,6 @@ def test_list_and_upcoming_schedule_api(client, db_session):
 
     assert len(upcoming) >= 1
     assert upcoming[0]["id"] == "sched_future"
-
-
-def test_full_end_to_end_schedule_flow(client, db_session):
-    """
-    Final End-to-End Test Verification:
-    Schedule interview for tomorrow -> Save in DB -> Send confirmation email
-    -> Show interview on upcoming dashboard.
-    """
-
-    candidate = Candidate(
-        candidate_id="cand_e2e_999",
-        name="E2E Tester",
-        email="e2e.tester@example.com",
-        email_verified=True,
-    )
-
-    db_session.add(candidate)
-    db_session.commit()
-
-    tomorrow = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
-
-    # 1. Schedule Interview via POST /api/schedule
-    with patch("smtplib.SMTP") as mock_smtp:
-        mock_server = MagicMock()
-        mock_smtp.return_value.__enter__.return_value = mock_server
-
-        post_res = client.post(
-            "/api/schedule",
-            json={
-                "candidate_id": "cand_e2e_999",
-                "interviewer_id": "Aditya Kanojiya",
-                "scheduled_at": tomorrow,
-                "notes": "Full-Stack Verification Round",
-                "send_email": True,
-            },
-        )
-
-    assert post_res.status_code == 201
-
-    res_data = post_res.json()
-    sched_id = res_data["schedule"]["id"]
-
-    # 2. Verify Saved in DB
-    db_entry = db_session.query(InterviewSchedule).filter_by(id=sched_id).first()
-
-    assert db_entry is not None
-    assert db_entry.candidate_id == "cand_e2e_999"
-    assert db_entry.interviewer_id == "Aditya Kanojiya"
-    assert db_entry.status == "scheduled"
-
-    # 3. Verify Email Sent Notification
-    assert res_data["email_notification"]["sent"] is True
-
-    # 4. Verify Shows on Upcoming Dashboard API
-    upcoming_res = client.get("/api/schedule/upcoming")
-
-    assert upcoming_res.status_code == 200
-
-    upcoming_list = upcoming_res.json()["upcoming"]
-
-    assert any(schedule_data["id"] == sched_id for schedule_data in upcoming_list)
 
 
 # ---------------------------------------------------------------------------

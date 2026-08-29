@@ -76,7 +76,7 @@ def test_partial_score_ignores_answers_without_scores():
         {"question_id": "q2", "score": None},
     ]
 
-    score, answered, unanswered, deduction = _calculate_partial_score(
+    score, answered, unanswered, _deduction = _calculate_partial_score(
         questions,
         answers,
     )
