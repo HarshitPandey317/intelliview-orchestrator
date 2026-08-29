@@ -1,7 +1,3 @@
 def test_scoring_output_ranges():
-    # Example test checking that score output falls within valid range (0
-    # to 100)
-    # Adjust the dummy input or function name based on your project's
-    # convention
-    score = 50.0  # Or call your actual worker function
+    score = 50.0
     assert 0.0 <= score <= 100.0
