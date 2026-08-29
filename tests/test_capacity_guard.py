@@ -14,9 +14,7 @@ def client_override():
     mock_candidate.email_verified = True
 
     mock_db_session = MagicMock()
-    mock_db_session.execute.return_value.scalar_one_or_none.return_value = (
-        mock_candidate
-    )
+    mock_db_session.execute.return_value.scalar_one_or_none.return_value = mock_candidate
 
     # 2. Override FastAPI Dependencies
     app.dependency_overrides[get_db] = lambda: mock_db_session
@@ -70,5 +68,4 @@ def test_capacity_check_exception_fails_safe_to_503(client_override):
                 "priority": "medium",
             },
         )
-
     assert response.status_code == 503
