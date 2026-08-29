@@ -68,20 +68,8 @@ def test_health(api_base_url):
 
 def test_start_interview_and_get_status(api_base_url):
     _wait_for_api(api_base_url)
-    # The worker pool may take a few seconds to become available after startup.
-    # Retry a few times before declaring failure.
-    r = None
-    for _ in range(5):
-        r = httpx.post(
-            f"{api_base_url}/start-interview",
-            headers=API_HEADERS,
-            json={"candidate_id": f"cand-{uuid.uuid4().hex[:8]}", "priority": "high"},
-            timeout=30.0,
-        )
-        if r.status_code == 200:
-            break
-        time.sleep(3)
     _wait_for_worker(api_base_url)
+
     r = httpx.post(
         f"{api_base_url}/start-interview",
         headers=API_HEADERS,
@@ -141,18 +129,8 @@ def test_worker_register_requires_token(api_base_url):
 def test_full_pipeline_completes(api_base_url):
     """End-to-end: start an interview, wait for the worker to process it."""
     _wait_for_api(api_base_url)
-    r = None
-    for _ in range(5):
-        r = httpx.post(
-            f"{api_base_url}/start-interview",
-            headers=API_HEADERS,
-            json={"candidate_id": f"e2e-{uuid.uuid4().hex[:8]}", "priority": "medium"},
-            timeout=30.0,
-        )
-        if r.status_code == 200:
-            break
-        time.sleep(3)
     _wait_for_worker(api_base_url)
+
     r = httpx.post(
         f"{api_base_url}/start-interview",
         headers=API_HEADERS,
