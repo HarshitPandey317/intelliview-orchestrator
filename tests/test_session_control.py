@@ -259,7 +259,10 @@ def test_start_interview_rejects_retry_after_limit():
             "orchestrator.main.has_pending_retry",
             return_value=True,
         ),
+        patch("orchestrator.main.scheduler") as mock_scheduler,
     ):
+        mock_scheduler.can_accept_task.return_value = True
+
         with pytest.raises(HTTPException) as exc_info:
             import asyncio
 
