@@ -81,6 +81,12 @@ def create_schedule_routes() -> APIRouter:
                     detail=f"Candidate with ID '{payload.candidate_id}' not found.",
                 )
 
+            if not candidate.email_verified:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Candidate email not verified",
+                )
+
             # Ensure datetime is timezone-aware
             scheduled_at = payload.scheduled_at
             if scheduled_at.tzinfo is None:
@@ -89,6 +95,7 @@ def create_schedule_routes() -> APIRouter:
             # Validate that scheduled_at is in the future
             now_utc = datetime.now(timezone.utc)
             if scheduled_at <= now_utc:
+                db.rollback()  # <-- Add this line
                 raise HTTPException(
                     status_code=400,
                     detail="Scheduled date and time must be in the future.",
@@ -376,6 +383,7 @@ def create_schedule_routes() -> APIRouter:
                 now_utc = datetime.now(timezone.utc)
 
                 if sched_at <= now_utc:
+                    db.rollback()  # <-- ADD THIS LINE
                     raise HTTPException(
                         status_code=400,
                         detail="Scheduled date and time must be in the future.",

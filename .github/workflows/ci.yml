@@ -147,6 +147,9 @@ jobs:
       - name: Validate API import path
         run: |
           docker compose -f docker-compose.yml run --rm fastapi \
+            - name: Validate API import path
+        run: |
+          docker compose -f docker-compose.yml run --rm fastapi \
             python -c "import orchestrator.main; print('ok')"
 
       - name: Bring up full stack
@@ -164,9 +167,15 @@ jobs:
             echo "Waiting for API... ($i)"
             sleep 2
           done
+
           echo "API never became healthy" >&2
           docker compose -f docker-compose.yml logs
           exit 1
+
+      - name: Seed verified E2E candidate
+        run: |
+          docker compose -f docker-compose.yml exec -T fastapi \
+            python -c "from database.db import SessionLocal; from database.models import Candidate; from datetime import datetime, timezone; db=SessionLocal(); c=Candidate(candidate_id='e2e-verified-candidate', name='E2E Candidate', email='e2e-verified@example.com', email_verified=True, skills=[], interview_history=[], total_interviews=0, created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc)); db.merge(c); db.commit(); db.close()"
 
       - name: Run end-to-end smoke tests
         run: pytest tests/test_e2e_smoke.py -v -m e2e

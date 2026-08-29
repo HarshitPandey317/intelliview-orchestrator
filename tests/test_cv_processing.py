@@ -1,3 +1,13 @@
+import sys
+from unittest.mock import MagicMock
+
+# Configure complete mock for cv2
+mock_cv2 = MagicMock()
+mock_cv2.imread.return_value = None
+mock_cv2.imdecode.return_value = None
+mock_cv2.cvtColor.side_effect = Exception("Unable to decode video frame")
+sys.modules["cv2"] = mock_cv2
+
 from cv_service import processing
 from cv_service.processing import detect_faces_in_frame
 
@@ -15,7 +25,6 @@ def test_missing_frame_is_handled_and_logged(caplog, monkeypatch):
     monkeypatch.setattr(processing, "HAS_MEDIAPIPE", True)
     with caplog.at_level("WARNING"):
         result = detect_faces_in_frame()
-
     assert result is None
     assert "No frame bytes or frame path provided" in caplog.text
 

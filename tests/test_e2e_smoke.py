@@ -73,7 +73,7 @@ def test_start_interview_and_get_status(api_base_url):
     r = httpx.post(
         f"{api_base_url}/start-interview",
         headers=API_HEADERS,
-        json={"candidate_id": f"cand-{uuid.uuid4().hex[:8]}", "priority": "high"},
+        json={"candidate_id": "e2e-verified-candidate", "priority": "high"},
         timeout=10.0,
     )
     assert r.status_code == 200, r.text
@@ -109,14 +109,14 @@ def test_system_health(api_base_url):
 
 def test_worker_register_requires_token(api_base_url):
     _wait_for_api(api_base_url)
-    # Without token — should be 401
+    # Without token â€” should be 401
     r = httpx.post(
         f"{api_base_url}/register-worker",
         json={"worker_id": "test-w", "capacity": 2},
         timeout=5.0,
     )
     assert r.status_code == 401
-    # With token — should succeed
+    # With token â€” should succeed
     r = httpx.post(
         f"{api_base_url}/register-worker",
         json={"worker_id": "test-w", "capacity": 2},
@@ -134,7 +134,7 @@ def test_full_pipeline_completes(api_base_url):
     r = httpx.post(
         f"{api_base_url}/start-interview",
         headers=API_HEADERS,
-        json={"candidate_id": f"e2e-{uuid.uuid4().hex[:8]}", "priority": "medium"},
+        json={"candidate_id": "e2e-verified-candidate", "priority": "medium"},
         timeout=10.0,
     )
     assert r.status_code == 200

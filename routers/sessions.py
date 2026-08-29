@@ -485,6 +485,20 @@ def create_session_routes(
         if not re.match(r"^[A-Za-z0-9._-]+$", request.candidate_id):
             raise HTTPException(status_code=422, detail="Invalid candidate_id")
 
+        # Verify candidate email verification status if the candidate is registered
+        candidate = session_db.execute(
+            select(Candidate).where(Candidate.candidate_id == request.candidate_id)
+        ).scalar_one_or_none()
+
+        if candidate and not candidate.email_verified:
+            logger.warning(
+                f"Booking rejected: Candidate {request.candidate_id} is not verified."
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="Candidate email not verified",
+            )
+
         try:
 
             logger.info(

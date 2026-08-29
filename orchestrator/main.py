@@ -1,17 +1,3 @@
-"""
-FastAPI Orchestration Server
-Main entry point for the AI Interview Orchestrator API
-
-Integrates:
-- Session Manager for lifecycle management
-- Session Tracker for monitoring
-- State Synchronizer for Redis/DB consistency
-- Scheduler for intelligent task scheduling
-- Load Balancer for worker distribution
-- Worker Registry for node tracking
-- Task Queue integration with Celery
-"""
-
 import io
 import json
 import logging
@@ -46,6 +32,7 @@ from config import (
 )
 from database.db import engine, get_db
 from database.models import Base, Candidate, InterviewSession
+from database.subscriber_store import create_table, list_subscribers
 from metrics.prometheus_metrics import (
     POSTGRES_HEALTH,
     REDIS_HEALTH,
@@ -90,66 +77,9 @@ from orchestrator.state_sync import StateSynchronizer
 from orchestrator.worker_registry import WorkerRegistry
 from routers.ab_testing import create_ab_testing_routes
 from routers.candidates import create_candidate_routes
-from routers.integrity import router as integrity_router
+from routers.email_verification import router as email_verification_router
 from routers.questions import create_question_routes
 from routers.schedule import create_schedule_routes
-
-"""Anti-cheat integrity signal ingestion routes."""
-
-from typing import Any
-
-from fastapi import APIRouter
-
-router = APIRouter(prefix="/integrity", tags=["integrity"])
-
-
-# In-memory storage of integrity events grouped by session_id.
-# This keeps the endpoint independent of the existing database models.
-integrity_events: dict[str, list[dict[str, Any]]] = {}
-
-
-class IntegrityEvent(BaseModel):
-    session_id: str = Field(min_length=1)
-    event_type: str = Field(min_length=1)
-    timestamp: datetime | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-@router.post("/events")
-async def ingest_integrity_event(event: IntegrityEvent):
-    """Receive and store an anti-cheat integrity event for a session."""
-
-    stored_event = {
-        "session_id": event.session_id,
-        "event_type": event.event_type,
-        "timestamp": (
-            event.timestamp.isoformat()
-            if event.timestamp
-            else datetime.now(timezone.utc).isoformat()
-        ),
-        "metadata": event.metadata,
-    }
-
-    integrity_events.setdefault(event.session_id, []).append(stored_event)
-
-    return {
-        "success": True,
-        "message": "Integrity event stored",
-        "session_id": event.session_id,
-        "event": stored_event,
-    }
-
-
-@router.get("/events/{session_id}")
-async def get_integrity_events(session_id: str):
-    """Return all stored integrity events for a session."""
-
-    return {
-        "session_id": session_id,
-        "events": integrity_events.get(session_id, []),
-    }
-
-
 from routers.session_control import (
     MAX_RETRIES,
     consume_retry,
@@ -399,16 +329,12 @@ app.add_middleware(
 
 
 def require_token(x_api_token: str | None = Header(default=None)) -> None:
-    """Dependency that requires a valid API token.
-
-    Worker agents (and any privileged caller) must send `X-API-Token`.
-    Set the expected token via the API_TOKEN env var.
-    """
-    if not API_TOKEN or API_TOKEN == "dev-token-change-me":
-        # In dev with the default token, accept but log.
-        logger.debug("Using default API token — set API_TOKEN in production")
-    if x_api_token != API_TOKEN:
-        raise HTTPException(status_code=401, detail="invalid or missing API token")
+    """Require a configured API token."""
+    if not API_TOKEN or x_api_token != API_TOKEN:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing authentication",
+        )
 
 
 class LoginRequest(BaseModel):
@@ -464,7 +390,6 @@ dashboard_routes = create_dashboard_routes(
     ws_manager=ws_manager,
 )
 app.include_router(dashboard_routes, prefix="/monitoring", tags=["monitoring"])
-app.include_router(integrity_router)
 
 
 # ========== Request/Response Models ==========
@@ -749,8 +674,6 @@ async def get_circuit_breaker_status():
 
 
 # ========== Interview Session Endpoints ==========
-
-
 @app.post(
     "/start-interview",
     response_model=InterviewSessionResponse,
@@ -783,6 +706,21 @@ async def start_interview(
         logger.info(
             f"API: Creating interview session for candidate {request.candidate_id}"
         )
+        candidate = session_db.execute(
+            select(Candidate).where(Candidate.candidate_id == request.candidate_id)
+        ).scalar_one_or_none()
+
+        if candidate is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Candidate not found",
+            )
+
+        if not candidate.email_verified:
+            raise HTTPException(
+                status_code=403,
+                detail="Candidate email not verified",
+            )
 
         # Parse priority
         priority_map = {
@@ -791,6 +729,29 @@ async def start_interview(
             "high": TaskPriority.HIGH,
         }
         priority = priority_map.get(request.priority.lower(), TaskPriority.MEDIUM)
+
+        # Check if system can accept task
+        try:
+            if not scheduler.can_accept_task():
+                logger.warning(
+                    f"System at capacity, rejecting task for candidate: {request.candidate_id}"
+                )
+                from fastapi.responses import JSONResponse
+
+                return JSONResponse(
+                    status_code=503,
+                    content={"error": "service_unavailable"},
+                    headers={"Retry-After": "5"},
+                )
+        except Exception as e:
+            logger.error(f"Error checking capacity: {e!s}")
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=503,
+                content={"error": "service_unavailable"},
+                headers={"Retry-After": "5"},
+            )
 
         # Enforce the Issue #72 retry limit per candidate and role.
         position = (request.position or "").strip()
@@ -830,6 +791,7 @@ async def start_interview(
                         status_code=409,
                         detail="Retry could not be started.",
                     )
+
         # Create session
         session_id = session_manager.create_session(
             candidate_id=request.candidate_id,
@@ -848,27 +810,6 @@ async def start_interview(
         session_manager.update_session_status(
             session_id, session_manager.QUEUED, {"priority": priority.name}
         )
-
-        # Check if system can accept task
-        try:
-            if not scheduler.can_accept_task():
-                logger.warning(f"System at capacity, rejecting task: {session_id}")
-                from fastapi.responses import JSONResponse
-
-                return JSONResponse(
-                    status_code=503,
-                    content={"error": "service_unavailable"},
-                    headers={"Retry-After": "5"},
-                )
-        except Exception as e:
-            logger.error(f"Error checking capacity: {e!s}")
-            from fastapi.responses import JSONResponse
-
-            return JSONResponse(
-                status_code=503,
-                content={"error": "service_unavailable"},
-                headers={"Retry-After": "5"},
-            )
 
         # Use scheduler to intelligently assign task
         scheduler.schedule_task(session_id, priority=priority)
@@ -1160,6 +1101,7 @@ def _build_risk_report_pdf(report: dict) -> Response:
     )
 
 
+app.include_router(email_verification_router)
 app.include_router(create_candidate_routes(candidate_manager=candidate_manager))
 app.include_router(create_schedule_routes())
 app.include_router(create_question_routes(question_bank=question_bank))
@@ -1387,7 +1329,7 @@ async def get_cache_stats():
         raise HTTPException(status_code=500, detail="Error fetching cache stats")
 
 
-@app.post("/sync-to-database")
+@app.post("/sync-to-database", dependencies=[Depends(require_token)])
 async def sync_cache_to_database(
     session_id: str | None = None,
     current_user=Depends(require_role("admin")),
@@ -2554,7 +2496,11 @@ async def get_dashboard():
         HTML content of the dashboard
     """
     try:
-        dashboard_path = Path(__file__).parent.parent / "monitoring" / "dashboard.html"
+
+        dashboard_path = os.path.join(
+            os.path.dirname(__file__), "..", "monitoring", "dashboard.html"
+        )
+
         dashboard_file = Path(dashboard_path)
 
         if await dashboard_file.exists():
@@ -2563,14 +2509,15 @@ async def get_dashboard():
             from fastapi.responses import HTMLResponse
 
             return HTMLResponse(content=html_content)
-
         raise HTTPException(status_code=404, detail="Dashboard HTML not found")
-
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error serving dashboard: {e!s}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error serving dashboard: {e!s}",
-        )
+        raise HTTPException(status_code=500, detail=f"Error serving dashboard: {e!s}")
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
