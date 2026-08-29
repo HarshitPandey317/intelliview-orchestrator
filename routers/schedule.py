@@ -362,9 +362,6 @@ def create_schedule_routes() -> APIRouter:
                 if payload.new_scheduled_at is not None
                 else payload.scheduled_at
             )
-            
-           
-
 
             if (
                 clean_status in {"cancelled", "completed"}

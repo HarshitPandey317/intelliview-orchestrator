@@ -64,10 +64,9 @@ def test_session_status_not_found(mock_get_session):
 
 def test_sync_to_database_without_token():
     response = client.post(
-    "/sync-to-database",
-    headers={"X-API-Token": ""},
-)
-
+        "/sync-to-database",
+        headers={"X-API-Token": ""},
+    )
 
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid or missing authentication"
@@ -237,6 +236,7 @@ def test_start_interview_valid(
         app.dependency_overrides.pop(get_db, None)
 
     assert response.status_code == 200
+
 
 # ---------------------------------------------------------------------------
 # Issue #19 - Schedule API tests
@@ -477,7 +477,9 @@ def test_schedule_update_invalid_status(
     assert "Allowed statuses" in response.json()["detail"]
 
 
-def test_reschedule_missing_datetime_fails(schedule_client, schedule_db, schedule_candidate):
+def test_reschedule_missing_datetime_fails(
+    schedule_client, schedule_db, schedule_candidate
+):
     """Test that setting status to 'rescheduled' without providing new_scheduled_at returns HTTP 400."""
     schedule = InterviewSchedule(
         id="sched_missing_dt_001",

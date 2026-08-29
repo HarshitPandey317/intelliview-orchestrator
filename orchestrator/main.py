@@ -333,6 +333,7 @@ app.add_middleware(
 
 # ========== Auth ==========
 
+
 def require_token(x_api_token: str | None = Header(default=None)) -> None:
     """Require a configured API token."""
     if not API_TOKEN or x_api_token != API_TOKEN:
@@ -340,7 +341,6 @@ def require_token(x_api_token: str | None = Header(default=None)) -> None:
             status_code=401,
             detail="Invalid or missing authentication",
         )
-
 
 
 class LoginRequest(BaseModel):

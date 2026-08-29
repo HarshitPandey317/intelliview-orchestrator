@@ -41,6 +41,7 @@ test_app.include_router(create_schedule_routes())
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def setup_db():
     Base.metadata.create_all(bind=test_engine)
@@ -70,10 +71,7 @@ def db_session():
 @pytest.fixture
 def client(db_session):
     test_app.dependency_overrides[get_db] = lambda: db_session
-    return TestClient(
-        test_app,
-        headers={"X-API-Token": "ci-test-token"}
-    )
+    return TestClient(test_app, headers={"X-API-Token": "ci-test-token"})
 
 
 @pytest.fixture
@@ -334,6 +332,8 @@ def test_cancel_schedule_api(client, db_session):
     assert normalize_utc(returned_time) == normalize_utc(original_time)
 
     # Verify database state.
+
+
 # Verify the in-memory record remains unchanged; the shared test
 # transaction may be deassociated by the failed request rollback.
 
@@ -345,7 +345,6 @@ def test_full_end_to_end_schedule_flow(client, db_session):
         name="E2E Candidate",
         email="e2e@example.com",
         email_verified=True,
-
     )
     db_session.add(candidate)
     db_session.commit()
@@ -374,6 +373,7 @@ def test_full_end_to_end_schedule_flow(client, db_session):
     )
     assert patch_res.status_code == 200
 
+
 def test_reschedule_schedule_api(client, db_session):
     """
     Test rescheduling an existing scheduled interview.
@@ -390,7 +390,6 @@ def test_reschedule_schedule_api(client, db_session):
         name="Reschedule Candidate",
         email="reschedule@example.com",
         email_verified=True,
-
     )
     db_session.add(candidate)
     db_session.commit()
@@ -486,7 +485,7 @@ def test_reschedule_schedule_past_date_fails(client, db_session):
 
     assert response.status_code == 400
     assert "must be in the future" in response.json()["detail"]
-    
+
 
 def test_cancel_rescheduled_schedule_api(client, db_session):
     """
@@ -505,7 +504,6 @@ def test_cancel_rescheduled_schedule_api(client, db_session):
         name="Reschedule Cancel Candidate",
         email="reschedule-cancel@example.com",
         email_verified=True,
-
     )
 
     db_session.add(candidate)
@@ -584,7 +582,6 @@ def test_reschedule_with_new_scheduled_at_alias(client, db_session):
         name="Alias Candidate",
         email="alias@example.com",
         email_verified=True,
-
     )
     db_session.add(candidate)
     db_session.commit()
@@ -675,7 +672,6 @@ def test_update_schedule_preserves_unrelated_fields(client, db_session):
         name="Preserve Candidate",
         email="preserve@example.com",
         email_verified=True,
-
     )
     db_session.add(candidate)
     db_session.commit()
@@ -719,7 +715,6 @@ def test_reschedule_with_invalid_datetime_format_fails(client, db_session):
         name="Invalid DT Candidate",
         email="invaliddt@example.com",
         email_verified=True,
-
     )
     db_session.add(candidate)
     db_session.commit()
@@ -752,7 +747,6 @@ def test_list_and_upcoming_schedule_api(client, db_session):
         name="Alice Engineer",
         email="alice.engineer@example.com",
         email_verified=True,
-
     )
 
     db_session.add(candidate)
@@ -872,7 +866,6 @@ def test_update_schedule_cancelled_creates_one_notification(
         name="Cancel Candidate",
         email="cancel@example.com",
         email_verified=True,
-
     )
 
     db_session.add(candidate)
@@ -993,7 +986,6 @@ def test_repeating_cancelled_status_does_not_create_duplicate_notification(
         name="Duplicate Candidate",
         email="duplicate@example.com",
         email_verified=True,
-    
     )
 
     db_session.add(candidate)
@@ -1056,7 +1048,6 @@ def test_repeating_rescheduled_status_does_not_create_duplicate_notification(
         name="Reschedule Duplicate Candidate",
         email="reschedule-duplicate@example.com",
         email_verified=True,
-
     )
 
     db_session.add(candidate)
@@ -1119,7 +1110,6 @@ def test_update_schedule_completed_does_not_create_notification(
         name="Completed Candidate",
         email="completed@example.com",
         email_verified=True,
-
     )
 
     db_session.add(candidate)
@@ -1230,7 +1220,6 @@ def test_cancelled_to_rescheduled_creates_one_notification(
         name="Cancel To Reschedule Candidate",
         email="cancel-to-reschedule@example.com",
         email_verified=True,
-
     )
 
     db_session.add(candidate)
@@ -1283,7 +1272,6 @@ def test_rescheduled_to_cancelled_creates_one_notification(
         name="Reschedule To Cancel Candidate",
         email="reschedule-to-cancel@example.com",
         email_verified=True,
-
     )
 
     db_session.add(candidate)
@@ -1334,7 +1322,6 @@ def test_duplicate_slot_booking_prevented_at_db_level(db_session):
         name="Dup Candidate",
         email="dup@example.com",
         email_verified=True,
-
     )
     db_session.add(candidate)
     db_session.commit()
@@ -1409,7 +1396,6 @@ def test_same_candidate_different_slots_allowed(db_session):
         name="Multi Slot Cand",
         email="multislot@example.com",
         email_verified=True,
-
     )
     db_session.add(candidate)
     db_session.commit()
