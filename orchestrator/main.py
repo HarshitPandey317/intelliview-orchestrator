@@ -2554,9 +2554,7 @@ async def get_dashboard():
         HTML content of the dashboard
     """
     try:
-        dashboard_path = (
-            Path(__file__).parent.parent / "monitoring" / "dashboard.html"
-        )
+        dashboard_path = Path(__file__).parent.parent / "monitoring" / "dashboard.html"
         dashboard_file = Path(dashboard_path)
 
         if await dashboard_file.exists():
