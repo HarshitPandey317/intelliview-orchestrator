@@ -113,7 +113,7 @@ services:
 
       API_URL: "http://fastapi:8000"
       API_TOKEN: ${API_TOKEN}
-
+      GEMINI_API_KEY: "${GEMINI_API_KEY}"
       WORKER_CONCURRENCY: "4"
       WORKER_ID: "${WORKER_ID:-worker-1}"
       CV_SERVICE_URL: http://cv-service:8001
